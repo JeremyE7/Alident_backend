@@ -1,5 +1,5 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// Prisma Schema for Dental Clinic Management System (Sistema de Gestión Odontológica)
+// Supports SQLite by default, easily switchable to PostgreSQL, MySQL, MongoDB, etc.
 
 generator client {
   provider = "prisma-client-js"
@@ -9,13 +9,1063 @@ datasource db {
   provider = "sqlite"
 }
 
-// Example model - You can customize this based on your needs
-model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// ============================================================================
+// 1. GESTIÓN DE PERSONAS (People Management)
+// ============================================================================
+
+// Pacientes (Patients)
+model Patient {
+  id                    Int       @id @default(autoincrement())
+  // Datos personales
+  firstName             String
+  lastName              String
+  documentType          String    // DNI, Passport, etc.
+  documentNumber        String    @unique
+  dateOfBirth           DateTime
+  gender                String    // Male, Female, Other
+  address               String?
+  city                  String?
+  postalCode            String?
+  primaryPhone          String
+  emergencyPhone        String?
+  email                 String?
+  occupation            String?
+  
+  // Información médica
+  bloodType             String?
+  allergies             String?   // JSON text field
+  chronicDiseases       String?   // JSON text field
+  currentMedications    String?   // JSON text field
+  previousSurgeries     String?   // JSON text field
+  isPregnant            Boolean   @default(false)
+  
+  // Historial odontológico
+  previousTreatments    String?   // JSON text field
+  previousDentist       String?
+  initialConsultReason  String?
+  
+  // Datos administrativos
+  registrationDate      DateTime  @default(now())
+  status                String    @default("active") // active, inactive, archived
+  referralSource        String?   // referral, advertising, social_media
+  gdprConsent           Boolean   @default(false)
+  
+  // Relaciones familiares
+  guardianId            Int?
+  guardian              Patient?  @relation("GuardianRelation", fields: [guardianId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  dependents            Patient[] @relation("GuardianRelation")
+  
+  // Preferencias
+  preferredSchedule     String?   // JSON text field
+  reminderPreferences   String?   // SMS, Email, WhatsApp
+  language              String    @default("es")
+  
+  // Relaciones
+  appointments          Appointment[]
+  clinicalHistories     ClinicalHistory[]
+  treatmentPlans        TreatmentPlan[]
+  odontograms           Odontogram[]
+  financialAccount      FinancialAccount?
+  payments              Payment[]
+  insuranceCoverages    InsuranceCoverage[]
+  communications        Communication[]
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 }
 
-// Add more models here as needed
+// Odontólogos/Doctores (Dentists/Doctors)
+model Dentist {
+  id                    Int       @id @default(autoincrement())
+  // Datos personales
+  firstName             String
+  lastName              String
+  documentType          String
+  documentNumber        String    @unique
+  dateOfBirth           DateTime
+  address               String?
+  phone                 String
+  email                 String    @unique
+  
+  // Datos profesionales
+  licenseNumber         String    @unique
+  specialties           String    // JSON array
+  yearsOfExperience     Int
+  certifications        String?   // JSON array
+  
+  // Configuración laboral
+  hireDate              DateTime
+  contractType          String    // fixed, services
+  status                String    @default("active") // active, inactive, vacation
+  
+  // Comisiones
+  commissionPercentage  Float     @default(0)
+  productivityBonus     Float     @default(0)
+  
+  // Relaciones
+  schedules             DentistSchedule[]
+  appointments          Appointment[]
+  treatmentPlans        TreatmentPlan[]
+  clinicalHistories     ClinicalHistory[]
+  commissions           Commission[]
+  treatmentSessions     TreatmentSession[]
+  officeAssignments     OfficeAssignment[]
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// Horarios de Odontólogos (Dentist Schedules)
+model DentistSchedule {
+  id                    Int       @id @default(autoincrement())
+  dentistId             Int
+  dentist               Dentist   @relation(fields: [dentistId], references: [id], onDelete: Cascade)
+  
+  dayOfWeek             Int       // 0=Sunday, 1=Monday, ..., 6=Saturday
+  startTime             String    // HH:MM format
+  endTime               String    // HH:MM format
+  appointmentDuration   Int       @default(30) // minutes
+  bufferTime            Int       @default(5)  // minutes between appointments
+  
+  isActive              Boolean   @default(true)
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// Personal Administrativo (Administrative Staff)
+model Staff {
+  id                    Int       @id @default(autoincrement())
+  firstName             String
+  lastName              String
+  documentType          String
+  documentNumber        String    @unique
+  email                 String    @unique
+  phone                 String
+  
+  role                  String    // receptionist, dental_assistant, cleaning, accountant
+  permissions           String?   // JSON array
+  
+  schedule              String?   // JSON object
+  salary                Float
+  status                String    @default("active")
+  
+  hireDate              DateTime
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// ============================================================================
+// 2. ESTRUCTURA CLÍNICA (Clinic Structure)
+// ============================================================================
+
+// Consultorios/Salas (Offices/Rooms)
+model Office {
+  id                    Int       @id @default(autoincrement())
+  name                  String    @unique
+  number                String    @unique
+  
+  equipment             String?   // JSON array
+  capacity              Int       @default(1)
+  officeType            String    // general, surgery, radiology
+  
+  status                String    @default("available") // available, maintenance, occupied
+  
+  appointments          Appointment[]
+  officeAssignments     OfficeAssignment[]
+  equipmentItems        Equipment[]
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// Asignación de Consultorios (Office Assignments)
+model OfficeAssignment {
+  id                    Int       @id @default(autoincrement())
+  officeId              Int
+  office                Office    @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  
+  dentistId             Int
+  dentist               Dentist   @relation(fields: [dentistId], references: [id], onDelete: Cascade)
+  
+  schedule              String    // JSON object with days and times
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// Equipamiento (Equipment)
+model Equipment {
+  id                    Int       @id @default(autoincrement())
+  name                  String
+  category              String
+  serialNumber          String?   @unique
+  
+  purchaseDate          DateTime?
+  cost                  Float?
+  supplier              String?
+  
+  lastMaintenance       DateTime?
+  nextMaintenance       DateTime?
+  maintenanceHistory    String?   // JSON array
+  
+  status                String    @default("operational") // operational, repair, out_of_service
+  
+  officeId              Int?
+  office                Office?   @relation(fields: [officeId], references: [id], onDelete: SetNull)
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// ============================================================================
+// 3. CATÁLOGO DE SERVICIOS (Services Catalog)
+// ============================================================================
+
+// Tratamientos/Procedimientos (Treatments/Procedures)
+model Treatment {
+  id                    Int       @id @default(autoincrement())
+  code                  String    @unique
+  name                  String
+  description           String?
+  category              String    // preventive, restorative, surgical, orthodontics, aesthetic, prosthetics
+  
+  estimatedDuration     Int       // minutes
+  
+  basePrice             Float
+  promotionalPrice      Float?
+  supplyCost            Float     @default(0)
+  
+  requiredSpecialty     String?
+  requiredEquipment     String?   // JSON array
+  typicalSessions       Int       @default(1)
+  
+  supplies              String?   // JSON array of required materials and quantities
+  
+  isActive              Boolean   @default(true)
+  
+  treatmentPlanItems    TreatmentPlanItem[]
+  treatmentSessions     TreatmentSession[]
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// ============================================================================
+// 4. ODONTOGRAMA Y HISTORIAL CLÍNICO (Odontogram and Clinical History)
+// ============================================================================
+
+// Odontograma (Dental Chart)
+model Odontogram {
+  id                    Int       @id @default(autoincrement())
+  patientId             Int
+  patient               Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  
+  date                  DateTime  @default(now())
+  notes                 String?
+  
+  teethData             String    // JSON object with all teeth states
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// Historia Clínica (Clinical History)
+model ClinicalHistory {
+  id                    Int       @id @default(autoincrement())
+  patientId             Int
+  patient               Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  
+  dentistId             Int
+  dentist               Dentist   @relation(fields: [dentistId], references: [id], onDelete: Restrict)
+  
+  visitDate             DateTime  @default(now())
+  
+  // Anamnesis
+  chiefComplaint        String?
+  symptoms              String?
+  currentIllnessHistory String?
+  
+  // Examen clínico
+  extraoralExam         String?
+  intraoralExam         String?
+  palpation             String?
+  percussion            String?
+  mobility              String?
+  
+  // Diagnósticos
+  primaryDiagnosis      String
+  secondaryDiagnoses    String?   // JSON array
+  icd10Codes            String?   // JSON array
+  
+  // Notas de evolución
+  evolutionNotes        String?
+  proceduresPerformed   String?   // JSON array
+  observations          String?
+  
+  // Archivos adjuntos
+  attachments           String?   // JSON array of file references
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// ============================================================================
+// 5. GESTIÓN DE CITAS (Appointments Management)
+// ============================================================================
+
+// Cita (Appointment)
+model Appointment {
+  id                    Int       @id @default(autoincrement())
+  patientId             Int
+  patient               Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  
+  dentistId             Int
+  dentist               Dentist   @relation(fields: [dentistId], references: [id], onDelete: Restrict)
+  
+  officeId              Int?
+  office                Office?   @relation(fields: [officeId], references: [id], onDelete: SetNull)
+  
+  appointmentDate       DateTime
+  startTime             String    // HH:MM format
+  endTime               String    // HH:MM format
+  duration              Int       // minutes
+  
+  appointmentType       String    // first_consultation, followup, treatment, emergency, control
+  
+  status                String    @default("scheduled") // scheduled, confirmed, in_waiting_room, in_progress, completed, cancelled, no_show, rescheduled
+  
+  cancellationReason    String?
+  cancelledBy           String?
+  cancellationDate      DateTime?
+  
+  notes                 String?
+  specialInstructions   String?
+  
+  // Recordatorios
+  remindersSent         String?   // JSON array with timestamps
+  
+  treatmentSessions     TreatmentSession[]
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// ============================================================================
+// 6. PLAN DE TRATAMIENTO (Treatment Plan)
+// ============================================================================
+
+// Plan de Tratamiento (Treatment Plan)
+model TreatmentPlan {
+  id                    Int       @id @default(autoincrement())
+  patientId             Int
+  patient               Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  
+  dentistId             Int
+  dentist               Dentist   @relation(fields: [dentistId], references: [id], onDelete: Restrict)
+  
+  planDate              DateTime  @default(now())
+  status                String    @default("proposed") // proposed, accepted, in_progress, completed, cancelled
+  
+  totalBudget           Float     @default(0)
+  
+  consentSigned         Boolean   @default(false)
+  consentDate           DateTime?
+  consentSignature      String?   // Base64 or file reference
+  
+  notes                 String?
+  
+  items                 TreatmentPlanItem[]
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// Item del Plan de Tratamiento (Treatment Plan Item)
+model TreatmentPlanItem {
+  id                    Int       @id @default(autoincrement())
+  treatmentPlanId       Int
+  treatmentPlan         TreatmentPlan @relation(fields: [treatmentPlanId], references: [id], onDelete: Cascade)
+  
+  treatmentId           Int
+  treatment             Treatment @relation(fields: [treatmentId], references: [id], onDelete: Restrict)
+  
+  teethAffected         String?   // JSON array of tooth numbers
+  priority              String    @default("medium") // urgent, high, medium, low
+  status                String    @default("pending") // pending, in_progress, completed
+  
+  estimatedSessions     Int       @default(1)
+  unitCost              Float
+  totalCost             Float
+  
+  sequence              Int       // Order of execution
+  notes                 String?
+  
+  treatmentSessions     TreatmentSession[]
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// Sesión de Tratamiento (Treatment Session)
+model TreatmentSession {
+  id                    Int       @id @default(autoincrement())
+  appointmentId         Int
+  appointment           Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  
+  treatmentPlanItemId   Int?
+  treatmentPlanItem     TreatmentPlanItem? @relation(fields: [treatmentPlanItemId], references: [id], onDelete: SetNull)
+  
+  treatmentId           Int
+  treatment             Treatment @relation(fields: [treatmentId], references: [id], onDelete: Restrict)
+  
+  dentistId             Int
+  dentist               Dentist   @relation(fields: [dentistId], references: [id], onDelete: Restrict)
+  
+  sessionDate           DateTime  @default(now())
+  
+  materialsUsed         String?   // JSON array
+  anesthesiaType        String?
+  anesthesiaQuantity    String?
+  
+  complications         String?
+  findings              String?
+  prescriptions         String?   // JSON array
+  
+  photos                String?   // JSON array of file references
+  xrays                 String?   // JSON array of file references
+  
+  nextSteps             String?
+  progressPercentage    Int       @default(0)
+  
+  notes                 String?
+  
+  inventoryMovements    InventoryMovement[]
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// ============================================================================
+// 7. SISTEMA FINANCIERO (Financial System)
+// ============================================================================
+
+// Cuenta Financiera del Paciente (Patient Financial Account)
+model FinancialAccount {
+  id                    Int       @id @default(autoincrement())
+  patientId             Int       @unique
+  patient               Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  
+  totalBalance          Float     @default(0)
+  pendingBalance        Float     @default(0)
+  
+  creditLimit           Float     @default(0)
+  
+  budgets               Budget[]
+  financingPlans        FinancingPlan[]
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// Presupuesto (Budget/Quote)
+model Budget {
+  id                    Int       @id @default(autoincrement())
+  financialAccountId    Int
+  financialAccount      FinancialAccount @relation(fields: [financialAccountId], references: [id], onDelete: Cascade)
+  
+  budgetNumber          String    @unique
+  budgetDate            DateTime  @default(now())
+  expirationDate        DateTime?
+  
+  items                 String    // JSON array of budget items
+  subtotal              Float
+  discounts             Float     @default(0)
+  taxes                 Float     @default(0)
+  total                 Float
+  
+  status                String    @default("pending") // pending, accepted, rejected, expired
+  
+  acceptanceDate        DateTime?
+  digitalSignature      String?   // Base64 or file reference
+  
+  version               Int       @default(1)
+  previousBudgetId      Int?
+  
+  notes                 String?
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// Pago (Payment)
+model Payment {
+  id                    Int       @id @default(autoincrement())
+  patientId             Int
+  patient               Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  
+  paymentDate           DateTime  @default(now())
+  amount                Float
+  
+  paymentMethod         String    // cash, debit_card, credit_card, transfer, financing_internal, financing_external, insurance, mixed
+  reference             String?
+  concept               String    // advance, installment, final_balance
+  
+  relatedTreatment      String?   // Reference to treatment
+  
+  receiptNumber         String    @unique
+  status                String    @default("successful") // successful, pending, reversed
+  
+  financingPlanId       Int?
+  financingPlan         FinancingPlan? @relation(fields: [financingPlanId], references: [id], onDelete: SetNull)
+  
+  invoiceId             Int?
+  invoice               Invoice?  @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  
+  cashRegisterId        Int?
+  cashRegister          CashRegister? @relation(fields: [cashRegisterId], references: [id], onDelete: SetNull)
+  
+  notes                 String?
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// Plan de Financiamiento (Financing Plan)
+model FinancingPlan {
+  id                    Int       @id @default(autoincrement())
+  financialAccountId    Int
+  financialAccount      FinancialAccount @relation(fields: [financialAccountId], references: [id], onDelete: Cascade)
+  
+  totalAmount           Float
+  numberOfInstallments  Int
+  installmentAmount     Float
+  
+  frequency             String    // weekly, biweekly, monthly
+  interestRate          Float     @default(0)
+  
+  startDate             DateTime
+  firstPaymentDate      DateTime
+  
+  downPayment           Float     @default(0)
+  
+  status                String    @default("active") // active, completed, defaulted, renegotiated
+  
+  installments          String    // JSON array of installment details
+  
+  payments              Payment[]
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// Factura (Invoice)
+model Invoice {
+  id                    Int       @id @default(autoincrement())
+  invoiceNumber         String    @unique
+  invoiceDate           DateTime  @default(now())
+  
+  patientName           String
+  patientDocument       String
+  patientAddress        String?
+  
+  items                 String    // JSON array of invoice items
+  subtotal              Float
+  taxes                 Float     @default(0)
+  total                 Float
+  
+  status                String    @default("issued") // issued, paid, cancelled
+  
+  payments              Payment[]
+  
+  notes                 String?
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// Caja (Cash Register)
+model CashRegister {
+  id                    Int       @id @default(autoincrement())
+  registerName          String
+  openingDate           DateTime  @default(now())
+  closingDate           DateTime?
+  
+  openingAmount         Float
+  closingAmount         Float?
+  expectedAmount        Float?
+  difference            Float?
+  
+  responsiblePerson     String
+  
+  status                String    @default("open") // open, closed
+  
+  movements             CashMovement[]
+  payments              Payment[]
+  
+  notes                 String?
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// Movimiento de Caja (Cash Movement)
+model CashMovement {
+  id                    Int       @id @default(autoincrement())
+  cashRegisterId        Int
+  cashRegister          CashRegister @relation(fields: [cashRegisterId], references: [id], onDelete: Cascade)
+  
+  movementDate          DateTime  @default(now())
+  type                  String    // income, expense
+  amount                Float
+  concept               String
+  supportDocument       String?
+  
+  responsiblePerson     String
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// ============================================================================
+// 8. INVENTARIOS (Inventory)
+// ============================================================================
+
+// Producto/Insumo (Product/Supply)
+model Product {
+  id                    Int       @id @default(autoincrement())
+  code                  String    @unique
+  name                  String
+  description           String?
+  
+  category              String    // dental_materials, anesthetics, disposables, medications, cleaning, office_supplies
+  unit                  String    // units, boxes, bottles, etc.
+  
+  suppliers             String?   // JSON array of supplier IDs
+  
+  unitCost              Float
+  salePrice             Float?
+  
+  currentStock          Int       @default(0)
+  minimumStock          Int       @default(0)
+  maximumStock          Int?
+  
+  location              String?
+  
+  expirationDate        DateTime?
+  lotNumber             String?
+  
+  isActive              Boolean   @default(true)
+  
+  inventoryMovements    InventoryMovement[]
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// Movimiento de Inventario (Inventory Movement)
+model InventoryMovement {
+  id                    Int       @id @default(autoincrement())
+  productId             Int
+  product               Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  movementDate          DateTime  @default(now())
+  type                  String    // entry, exit, adjustment
+  quantity              Int
+  reason                String    // purchase, return, use_in_treatment, sale, waste, expiration
+  
+  treatmentSessionId    Int?
+  treatmentSession      TreatmentSession? @relation(fields: [treatmentSessionId], references: [id], onDelete: SetNull)
+  
+  responsiblePerson     String
+  supportDocument       String?
+  
+  notes                 String?
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// Proveedor (Supplier)
+model Supplier {
+  id                    Int       @id @default(autoincrement())
+  name                  String
+  contactPerson         String?
+  phone                 String?
+  email                 String?
+  address               String?
+  
+  taxId                 String?
+  
+  paymentTerms          String?
+  
+  isActive              Boolean   @default(true)
+  
+  purchaseOrders        PurchaseOrder[]
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// Orden de Compra (Purchase Order)
+model PurchaseOrder {
+  id                    Int       @id @default(autoincrement())
+  orderNumber           String    @unique
+  orderDate             DateTime  @default(now())
+  expectedDeliveryDate  DateTime?
+  actualDeliveryDate    DateTime?
+  
+  supplierId            Int
+  supplier              Supplier  @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  
+  items                 String    // JSON array of order items
+  subtotal              Float
+  taxes                 Float     @default(0)
+  total                 Float
+  
+  status                String    @default("pending") // pending, received, partial, cancelled
+  
+  notes                 String?
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// ============================================================================
+// 9. GASTOS OPERATIVOS (Operating Expenses)
+// ============================================================================
+
+// Categoría de Gasto (Expense Category)
+model ExpenseCategory {
+  id                    Int       @id @default(autoincrement())
+  name                  String    @unique
+  description           String?
+  type                  String    // fixed, variable
+  
+  isActive              Boolean   @default(true)
+  
+  expenses              Expense[]
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// Gasto (Expense)
+model Expense {
+  id                    Int       @id @default(autoincrement())
+  expenseDate           DateTime  @default(now())
+  
+  categoryId            Int
+  category              ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  
+  amount                Float
+  paymentMethod         String
+  
+  supplier              String?
+  concept               String
+  invoice               String?
+  
+  costCenter            String?   // specific office or general
+  
+  approvedBy            String?
+  status                String    @default("pending") // pending, paid, cancelled
+  
+  isRecurring           Boolean   @default(false)
+  recurringFrequency    String?   // monthly, quarterly, annually
+  
+  notes                 String?
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// ============================================================================
+// 10. RECURSOS HUMANOS (Human Resources)
+// ============================================================================
+
+// Nómina (Payroll)
+model Payroll {
+  id                    Int       @id @default(autoincrement())
+  
+  employeeType          String    // dentist, staff
+  employeeId            Int
+  employeeName          String
+  
+  payrollPeriod         String    // YYYY-MM format
+  paymentDate           DateTime
+  
+  baseSalary            Float
+  commissions           Float     @default(0)
+  bonuses               Float     @default(0)
+  overtimeHours         Float     @default(0)
+  overtimePay           Float     @default(0)
+  
+  deductions            Float     @default(0)
+  deductionDetails      String?   // JSON object
+  
+  netSalary             Float
+  
+  status                String    @default("pending") // pending, paid
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// Asistencia (Attendance)
+model Attendance {
+  id                    Int       @id @default(autoincrement())
+  
+  employeeType          String    // dentist, staff
+  employeeId            Int
+  employeeName          String
+  
+  date                  DateTime
+  checkIn               String?   // HH:MM format
+  checkOut              String?   // HH:MM format
+  
+  hoursWorked           Float?
+  
+  status                String    // present, absent, late, vacation, sick_leave, permission
+  
+  notes                 String?
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// ============================================================================
+// 11. COMISIONES Y PRODUCTIVIDAD (Commissions and Productivity)
+// ============================================================================
+
+// Comisión (Commission)
+model Commission {
+  id                    Int       @id @default(autoincrement())
+  dentistId             Int
+  dentist               Dentist   @relation(fields: [dentistId], references: [id], onDelete: Cascade)
+  
+  period                String    // YYYY-MM format
+  
+  totalTreatments       Int       @default(0)
+  totalRevenue          Float     @default(0)
+  
+  commissionAmount      Float     @default(0)
+  bonusAmount           Float     @default(0)
+  
+  status                String    @default("pending") // pending, paid
+  paymentDate           DateTime?
+  
+  details               String?   // JSON array of treatments included
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// ============================================================================
+// 12. COMUNICACIONES (Communications)
+// ============================================================================
+
+// Comunicación (Communication)
+model Communication {
+  id                    Int       @id @default(autoincrement())
+  patientId             Int
+  patient               Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  
+  messageType           String    // appointment_confirmation, reminder, cancellation, payment_reminder, promotion, birthday, reactivation
+  channel               String    // sms, email, whatsapp, push, call
+  
+  subject               String?
+  message               String
+  
+  sentDate              DateTime  @default(now())
+  status                String    @default("sent") // sent, delivered, read, responded, failed
+  
+  scheduledDate         DateTime?
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// Plantilla de Mensaje (Message Template)
+model MessageTemplate {
+  id                    Int       @id @default(autoincrement())
+  name                  String    @unique
+  type                  String    // appointment_confirmation, reminder, etc.
+  
+  subject               String?
+  body                  String
+  
+  variables             String?   // JSON array of available variables
+  
+  channel               String    // sms, email, whatsapp
+  
+  isActive              Boolean   @default(true)
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// ============================================================================
+// 13. MARKETING Y FIDELIZACIÓN (Marketing and Loyalty)
+// ============================================================================
+
+// Programa de Fidelización (Loyalty Program)
+model LoyaltyProgram {
+  id                    Int       @id @default(autoincrement())
+  name                  String
+  description           String?
+  
+  programType           String    // points, membership, referral
+  
+  pointsPerTreatment    Float?
+  pointsPerCurrency     Float?
+  
+  membershipFee         Float?
+  membershipDuration    Int?      // months
+  
+  benefits              String?   // JSON array
+  
+  isActive              Boolean   @default(true)
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// Campaña de Marketing (Marketing Campaign)
+model MarketingCampaign {
+  id                    Int       @id @default(autoincrement())
+  name                  String
+  description           String?
+  
+  campaignType          String    // promotion, reactivation, birthday
+  
+  startDate             DateTime
+  endDate               DateTime?
+  
+  targetAudience        String?   // JSON object with filters
+  
+  discount              Float?
+  discountType          String?   // percentage, fixed
+  
+  couponCode            String?   @unique
+  
+  status                String    @default("active") // active, completed, cancelled
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// ============================================================================
+// 14. SEGUROS DENTALES (Dental Insurance)
+// ============================================================================
+
+// Aseguradora (Insurance Company)
+model InsuranceCompany {
+  id                    Int       @id @default(autoincrement())
+  name                  String    @unique
+  contactPerson         String?
+  phone                 String?
+  email                 String?
+  
+  agreementTerms        String?   // JSON object
+  coverageDetails       String?   // JSON object with coverage percentages by treatment type
+  
+  annualLimit           Float?
+  treatmentLimit        Float?
+  
+  copaymentPercentage   Float?
+  
+  isActive              Boolean   @default(true)
+  
+  insuranceCoverages    InsuranceCoverage[]
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// Cobertura de Seguro (Insurance Coverage)
+model InsuranceCoverage {
+  id                    Int       @id @default(autoincrement())
+  patientId             Int
+  patient               Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  
+  insuranceCompanyId    Int
+  insuranceCompany      InsuranceCompany @relation(fields: [insuranceCompanyId], references: [id], onDelete: Restrict)
+  
+  policyNumber          String
+  affiliateNumber       String
+  
+  validFrom             DateTime
+  validUntil            DateTime
+  
+  coveragePercentage    Float
+  annualLimit           Float?
+  remainingLimit        Float?
+  
+  status                String    @default("active") // active, expired, cancelled
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// ============================================================================
+// 15. AUDITORÍA Y SEGURIDAD (Audit and Security)
+// ============================================================================
+
+// Usuario del Sistema (System User)
+model SystemUser {
+  id                    Int       @id @default(autoincrement())
+  username              String    @unique
+  email                 String    @unique
+  passwordHash          String
+  
+  role                  String    // superadmin, admin, dentist, receptionist, assistant, accountant, readonly
+  permissions           String?   // JSON array of granular permissions
+  
+  relatedEntityType     String?   // dentist, staff
+  relatedEntityId       Int?
+  
+  isActive              Boolean   @default(true)
+  lastLogin             DateTime?
+  
+  auditLogs             AuditLog[]
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+// Registro de Auditoría (Audit Log)
+model AuditLog {
+  id                    Int       @id @default(autoincrement())
+  userId                Int?
+  user                  SystemUser? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  action                String    // create, read, update, delete, login, logout
+  entityType            String    // patient, appointment, payment, etc.
+  entityId              Int?
+  
+  changes               String?   // JSON object with before/after values
+  
+  ipAddress             String?
+  userAgent             String?
+  
+  timestamp             DateTime  @default(now())
+  
+  createdAt             DateTime  @default(now())
+}
+
+// ============================================================================
+// 16. CONFIGURACIONES (Configuration)
+// ============================================================================
+
+// Configuración del Sistema (System Configuration)
+model SystemConfiguration {
+  id                    Int       @id @default(autoincrement())
+  key                   String    @unique
+  value                 String
+  description           String?
+  category              String    // clinic_info, scheduling, financial, notifications, policies
+  
+  updatedAt             DateTime  @updatedAt
+  createdAt             DateTime  @default(now())
+}

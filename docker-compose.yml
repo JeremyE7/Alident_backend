@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: alident-backend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=file:/app/data/prod.db
+      - CORS_ORIGIN=*
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+
+  # Opcional: PostgreSQL Database
+  # Descomenta si quieres usar PostgreSQL en lugar de SQLite
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: alident-postgres
+  #   environment:
+  #     POSTGRES_USER: alident
+  #     POSTGRES_PASSWORD: alident_password
+  #     POSTGRES_DB: alident
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   restart: unless-stopped
+
+# volumes:
+#   postgres_data:
